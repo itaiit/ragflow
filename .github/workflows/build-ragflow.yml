@@ -1,0 +1,94 @@
+name: Build RAGFlow to GitHub Releases
+
+on:
+  workflow_dispatch: # 允许手动触发
+  push:
+    tags:
+      - 'v*' # 也可以设置为推送标签时触发
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: 'arm64'
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Cache UV
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/uv
+          key: ${{ runner.os }}-uv-${{ hashFiles('pyproject.toml', 'uv.lock') }}
+
+      - name: Install UV
+        run: pip install uv
+
+      - name: Download Dependencies
+        run: uv run download_deps.py
+        env:
+          UV_INDEX_URL: https://pypi.tuna.tsinghua.edu.cn/simple
+
+      # --- 步骤 1: 构建 ragflow_deps ---
+      - name: Build ragflow_deps Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile.deps
+          push: false # 关键：不推送到仓库
+          platforms: linux/arm64
+          tags: infiniflow/ragflow_deps:latest
+          outputs: type=docker,dest=/tmp/ragflow_deps.tar # 导出为 tar 文件
+
+      - name: Upload ragflow_deps Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ragflow_deps-image
+          path: /tmp/ragflow_deps.tar
+          retention-days: 5 # 临时保留5天，构建 Release 后即可删除
+
+      # --- 步骤 2: 构建 ragflow:nightly ---
+      - name: Build ragflow:nightly Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: false # 关键：不推送到仓库
+          platforms: linux/arm64
+          tags: infiniflow/ragflow:nightly
+          outputs: type=docker,dest=/tmp/ragflow_nightly.tar # 导出为 tar 文件
+
+      - name: Upload ragflow_nightly Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ragflow_nightly-image
+          path: /tmp/ragflow_nightly.tar
+          retention-days: 5
+
+      # --- 步骤 3: 创建 GitHub Release 并上传镜像 ---
+      - name: Create Release and Upload Images
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: auto-build-${{ github.run_number }} # 自动生成标签，如 auto-build-123
+          name: RAGFlow Build #${{ github.run_number }}
+          body: |
+            自动构建的 RAGFlow Docker 镜像 (ARM64 架构)。
+            
+            ### 安装说明
+            1. 下载下方的 `.tar` 文件。
+            2. 在本地终端运行：
+               ```bash
+               docker load -i ragflow_nightly.tar
+               docker load -i ragflow_deps.tar
+               ```
+            3. 修改 docker-compose.yml 中的镜像名为 `infiniflow/ragflow:nightly`。
+          files: |
+            /tmp/ragflow_deps.tar
+            /tmp/ragflow_nightly.tar
+          draft: false # 设为 true 则发布为草稿，需手动确认发布
