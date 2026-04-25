@@ -67,7 +67,12 @@ jobs:
           platforms: linux/arm64
           tags: infiniflow/ragflow:nightly
           outputs: type=docker,dest=/tmp/ragflow_nightly.tar
-
+      - name: Compress and Split Images
+        run: |
+          # 压缩率通常能达到 30%-50%，如果还大就用 split 分割
+          gzip /tmp/ragflow_deps.tar
+          gzip /tmp/ragflow_nightly.tar
+          split -b 1900M /tmp/ragflow_nightly.tar.gz /tmp/ragflow_nightly_part_
       # --- 5. 创建 Release 并上传 ---
       # 修正点2：参考官方配置，使用 v2 版本，并显式传递 token
       - name: Create Release and Upload Images
@@ -90,4 +95,4 @@ jobs:
           # 修正点3：直接将构建产物路径填入 files，不需要先 upload-artifact 再下载
           files: |
             /tmp/ragflow_deps.tar
-            /tmp/ragflow_nightly.tar
+            /tmp/ragflow_nightly.tar.gz.*
