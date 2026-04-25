@@ -61,55 +61,17 @@ jobs:
           platforms: linux/arm64
           tags: infiniflow/ragflow:nightly
           outputs: type=docker,dest=/tmp/ragflow_nightly.tar
-
-      # --- 修正点 1: 压缩并分卷 (注意文件名逻辑) ---
-      - name: Compress and Split Images
-        run: |
-          # 1. 先压缩
-          gzip /tmp/ragflow_deps.tar
-          gzip /tmp/ragflow_nightly.tar
-          
-          # 2. 分卷 (注意: split 默认后缀是字母, 我们用 -d 指定为数字, 并用 -a 1 指定后缀长度为 1)
-          # 这样会生成 ragflow_nightly.tar.gz0, ragflow_nightly.tar.gz1...
-          split -b 1900M -d -a 1 /tmp/ragflow_nightly.tar.gz /tmp/ragflow_nightly_part_
-          split -b 1900M -d -a 1 /tmp/ragflow_deps.tar.gz /tmp/ragflow_deps_part_
-
-      # --- 修正点 2: 创建 Release ---
-      - name: Create Release and Upload Images
-        uses: softprops/action-gh-release@v2
+      # --- 新增步骤：上传产物 ---
+      - name: Upload ragflow_nightly Artifact
+        uses: actions/upload-artifact@v4
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          tag_name: auto-build-${{ github.run_number }}
-          name: RAGFlow Build #${{ github.run_number }}
-          body: |
-            自动构建的 RAGFlow Docker 镜像 (ARM64 架构)。
-            
-            ### ⚠️ 注意
-            文件已分卷压缩，请确保下载了所有分卷文件再进行解压。
-            
-            ### 安装说明
-            1. 下载所有分卷文件（例如 ragflow_nightly.tar.gz0, ragflow_nightly.tar.gz1...）。
-            2. 在本地终端运行：
-               ```bash
-               # 1. 合并文件
-               cat ragflow_nightly_part_* > ragflow_nightly.tar.gz
-               cat ragflow_deps_part_* > ragflow_deps.tar.gz
-               
-               # 2. 解压
-               gunzip ragflow_nightly.tar.gz
-               gunzip ragflow_deps.tar.gz
-               
-               # 3. 加载到 Docker
-               docker load -i ragflow_nightly.tar
-               docker load -i ragflow_deps.tar
-               ```
-          draft: false
-          # 3. 修正点: 这里要列出具体的分卷文件名
-          # 因为我们用了 split -d -a 1, 所以文件名是 0, 1, 2...
-          files: |
-            /tmp/ragflow_nightly_part_0
-            /tmp/ragflow_nightly_part_1
-            /tmp/ragflow_nightly_part_2
-            /tmp/ragflow_deps_part_0
-            /tmp/ragflow_deps_part_1
-            /tmp/ragflow_deps_part_2
+          name: ragflow_nightly-image
+          path: /tmp/ragflow_nightly.tar
+          retention-days: 5
+      # --- 新增步骤：上传产物 ---
+      - name: Upload ragflow_nightly Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ragflow_nightly-image
+          path: /tmp/ragflow_deps.tar
+          retention-days: 5
