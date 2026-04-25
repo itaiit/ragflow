@@ -90,4 +90,4 @@ jobs:
           # 修正点3：直接将构建产物路径填入 files，不需要先 upload-artifact 再下载
           files: |
             /tmp/ragflow_deps.tar
-            /tmp/tmp/ragflow_nightly.tar
+            /tmp/ragflow_nightly.tar
